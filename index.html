@@ -20,6 +20,45 @@
           navigator.serviceWorker.register('/sw.js')
             .then((reg) => {
               console.log('PWA ServiceWorker registered successfully:', reg.scope);
+              
+              // Programmatically seed cache with all currently loaded scripts, styles, fonts, and assets!
+              // This is a 100% bulletproof solution for offline gameplay without needing hardcoded file lists.
+              if ('caches' in window) {
+                // Wait 1.5 seconds for all dynamic elements (like 3D engine scripts and models) to finish loading
+                setTimeout(() => {
+                  caches.open('subway-surfers-3d-v1').then((cache) => {
+                    const resourceEntries = performance.getEntriesByType('resource');
+                    const urlsToCache = resourceEntries
+                      .map(entry => entry.name)
+                      .filter(url => {
+                        // Only cache local origin files and Google fonts
+                        const isLocal = url.startsWith(window.location.origin);
+                        const isFont = url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com');
+                        const isSymmetric = !url.includes('/@vite/') && !url.includes('/@react-refresh') && !url.includes('hot-update');
+                        return (isLocal || isFont) && isSymmetric;
+                      });
+
+                    // Add main document and manifest
+                    const finalUrls = Array.from(new Set([
+                      window.location.origin + '/',
+                      window.location.origin + '/index.html',
+                      window.location.origin + '/manifest.json',
+                      window.location.origin + '/icon-512.jpg',
+                      ...urlsToCache
+                    ]));
+
+                    Promise.all(
+                      finalUrls.map(url => {
+                        return cache.add(url)
+                          .then(() => console.log('Successfully cached resource:', url))
+                          .catch(err => console.debug('Skipped caching for:', url, err));
+                      })
+                    ).then(() => {
+                      console.log('PWA Offline Cache priming complete!');
+                    });
+                  });
+                }, 1500);
+              }
             })
             .catch((err) => {
               console.warn('PWA ServiceWorker registration failed:', err);

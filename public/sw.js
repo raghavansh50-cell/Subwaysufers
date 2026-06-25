@@ -6,16 +6,23 @@ const ASSETS = [
   '/icon-512.jpg'
 ];
 
-// Install Event
+// Install Event - cache initial core shell files
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
+      // Use map with catch to prevent install failure if a single asset has an issue
+      return Promise.all(
+        ASSETS.map(asset => {
+          return cache.add(asset).catch(err => {
+            console.warn('Initial cache failed for:', asset, err);
+          });
+        })
+      );
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate Event
+// Activate Event - clean up legacy caches and immediately take control
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -32,18 +39,53 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests and local scope
+  // Only handle GET requests
   if (event.request.method !== 'GET') return;
   
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
 
+  // 1. Navigation requests (e.g. page refresh, going to subpaths): fallback to root index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('/').then((response) => {
+        return response || caches.match('/index.html') || fetch(event.request);
+      }).catch(() => {
+        return caches.match('/index.html');
+      })
+    );
+    return;
+  }
+
+  // 2. Cache external fonts
+  if (url.origin !== self.location.origin) {
+    if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
+      event.respondWith(
+        caches.open(CACHE_NAME).then((cache) => {
+          return cache.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) return cachedResponse;
+            return fetch(event.request).then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(event.request, networkResponse.clone());
+              }
+              return networkResponse;
+            }).catch(() => {
+              // Font fetch failed offline, fail gracefully without breaking
+              return null;
+            });
+          });
+        })
+      );
+    }
+    return;
+  }
+
+  // 3. Local assets (JS, CSS, images, etc.) using Cache-First strategy for instant offline playback
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch fresh in background to update cache (stale-while-revalidate)
+        // Stale-while-revalidate: Fetch fresh in background to update cache for next load when online
         fetch(event.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, networkResponse);
             });
@@ -54,7 +96,7 @@ self.addEventListener('fetch', (event) => {
       }
       
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+        if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
         }
         
@@ -64,11 +106,9 @@ self.addEventListener('fetch', (event) => {
         });
         
         return networkResponse;
-      }).catch(() => {
-        // Offline fallback if not available
-        return new Response('Offline mode: Game is loading...', {
-          headers: { 'Content-Type': 'text/plain' }
-        });
+      }).catch((err) => {
+        // Silent error for failed assets when offline, avoiding returning broken text responses
+        console.warn('Asset fetch failed offline:', event.request.url);
       });
     })
   );
