@@ -50,6 +50,7 @@ export interface PlayerStats {
   unlockedSkins: string[];
   activeSkin: string;
   upgrades: UpgradeState;
+  hoverboards: number;
 }
 
 // 3D Point for projection
@@ -120,8 +121,8 @@ export const GAME_CONSTANTS = {
   SPEED_INCREMENT: 0.002, // Added per second
   MAX_SPEED: 0.45,
   GRAVITY: -0.012,
-  JUMP_FORCE: 0.32,
-  SNEAKERS_JUMP_FORCE: 0.42,
+  JUMP_FORCE: 0.26,
+  SNEAKERS_JUMP_FORCE: 0.35,
   SLIDE_DURATION: 700, // in milliseconds
   LANE_SWITCH_SPEED: 0.18, // speed of horizontal lane change
   COIN_SPAWN_CHANCE: 0.3,

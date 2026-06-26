@@ -16,6 +16,7 @@ interface HUDProps {
   activeJetpack: boolean;
   activeSneakers: boolean;
   activeHoverboard: boolean;
+  hoverboardCount?: number;
   isPaused: boolean;
   setIsPaused: (paused: boolean) => void;
   onExitGame: () => void;
@@ -29,6 +30,7 @@ export default function HUD({
   activeJetpack,
   activeSneakers,
   activeHoverboard,
+  hoverboardCount,
   isPaused,
   setIsPaused,
   onExitGame,
@@ -92,7 +94,7 @@ export default function HUD({
             <div className="bg-purple-950/80 border border-purple-900/60 backdrop-blur-md rounded-xl px-3 py-1.5 flex items-center gap-2 text-purple-300 animate-pulse shadow-md shadow-purple-950/20">
               <Shield className="w-4 h-4" />
               <div className="flex-1">
-                <div className="text-[9px] font-mono uppercase font-black tracking-wider leading-none">BOARD ACCEL</div>
+                <div className="text-[9px] font-mono uppercase font-black tracking-wider leading-none">SURFBOARD ACTIVE</div>
               </div>
             </div>
           )}
@@ -221,6 +223,31 @@ export default function HUD({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Manual Hoverboard Activation Button */}
+      {!isPaused && hoverboardCount !== undefined && hoverboardCount > 0 && (
+        <div className="absolute bottom-6 left-6 pointer-events-auto flex flex-col items-center space-y-1">
+          <button
+            id="btn-activate-surfboard"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('activate-hoverboard'));
+            }}
+            className="w-16 h-16 rounded-full bg-slate-950/90 border-2 border-purple-500 flex items-center justify-center hover:bg-purple-950/40 hover:border-purple-400 active:scale-95 transition-all duration-150 shadow-[0_0_15px_rgba(168,85,247,0.4)] relative cursor-pointer group"
+            title="Double tap screen or tap here to Activate Surfboard! (Shift / E)"
+          >
+            {/* Pulsing neon ripple */}
+            <div className="absolute inset-0 rounded-full border border-purple-500/30 animate-ping group-hover:animate-none" />
+            <Shield className="w-8 h-8 text-purple-400 group-hover:scale-110 transition-transform" />
+            {/* Count Badge */}
+            <span className="absolute -top-1.5 -right-1.5 bg-purple-600 text-white font-mono font-bold text-xs px-2 py-0.5 rounded-full border border-purple-400 shadow shadow-purple-950">
+              {hoverboardCount}
+            </span>
+          </button>
+          <span className="text-[9px] font-bold font-mono tracking-wider text-purple-400 drop-shadow animate-pulse">
+            TAP OR DOUBLE TAP
+          </span>
         </div>
       )}
     </div>

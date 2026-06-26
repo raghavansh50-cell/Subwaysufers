@@ -1,6 +1,6 @@
 {
-  "name": "Subway Surfers 3D",
-  "short_name": "Subway 3D",
+  "name": "Subway Surfers",
+  "short_name": "Subway Surfers",
   "description": "A high-performance 3D cyberpunk subway runner game.",
   "start_url": "/",
   "display": "standalone",

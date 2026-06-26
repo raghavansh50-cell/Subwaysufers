@@ -15,6 +15,7 @@ interface MainMenuProps {
   onEquipSkin: (id: string) => void;
   onUnlockSkin: (id: string) => void;
   onBuyUpgrade: (type: 'magnet' | 'jetpack' | 'hoverboard' | 'sneakers') => void;
+  onBuyHoverboard: () => void;
   onResetStats: () => void;
 }
 
@@ -25,6 +26,7 @@ export default function MainMenu({
   onEquipSkin,
   onUnlockSkin,
   onBuyUpgrade,
+  onBuyHoverboard,
   onResetStats,
 }: MainMenuProps) {
   const [activeTab, setActiveTab] = useState<'play' | 'skins' | 'upgrades' | 'leaderboard'>('play');
@@ -93,7 +95,7 @@ export default function MainMenu({
               id="btn-pwa-install"
               onClick={handleInstall}
               className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-xs font-bold font-sans hover:shadow-lg hover:shadow-cyan-500/20 active:scale-95 transition flex items-center gap-1.5"
-              title="Install Subway Surfers 3D as a mobile PWA"
+              title="Install Subway Surfers as a mobile PWA"
             >
               <Download className="w-4 h-4" /> Install App
             </button>
@@ -359,6 +361,33 @@ export default function MainMenu({
                   </div>
                 );
               })}
+            </div>
+
+            {/* Surfboard Purchase Section */}
+            <div className="mt-6 p-5 rounded-2xl border border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl text-purple-400">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-base text-white">Buy Surfboards</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Activate a surfboard during gameplay by tapping to protect yourself from train crashes!</p>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">Current Stock: <span className="text-purple-400 font-bold">{stats.hoverboards || 0}</span></div>
+                </div>
+              </div>
+              <button
+                id="btn-buy-hoverboard"
+                onClick={() => onBuyHoverboard()}
+                disabled={stats.coins < 150}
+                className={`px-5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition flex items-center gap-2 shrink-0 ${
+                  stats.coins >= 150
+                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/10 cursor-pointer'
+                    : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
+                }`}
+              >
+                <span>Buy Surfboard</span>
+                <span className="font-mono text-xs font-black">$150</span>
+              </button>
             </div>
           </div>
         )}

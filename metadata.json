@@ -1,5 +1,5 @@
 {
-  "name": "Subway Surfers 3D",
+  "name": "Subway Surfers",
   "description": "A lightweight, high-performance 3D subway runner game with trains, coins, obstacles, power-ups, customizable characters, and a chasing officer.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

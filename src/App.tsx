@@ -67,6 +67,7 @@ const DEFAULT_STATS: PlayerStats = {
     hoverboardLevel: 1,
     sneakersLevel: 1,
   },
+  hoverboards: 3,
 };
 
 const STORAGE_KEY = 'subway_surfers_3d_player_stats_v1';
@@ -77,6 +78,14 @@ export default function App() {
 
   // Global persistent player stats state
   const [stats, setStats] = useState<PlayerStats>(DEFAULT_STATS);
+  // Live powerup states and hoverboards stock from current run
+  const [activePowerUps, setActivePowerUps] = useState({
+    magnet: false,
+    jetpack: false,
+    sneakers: false,
+    hoverboard: false,
+    hoverboardCount: 3,
+  });
   // Track state of current active run
   const [currentScore, setCurrentScore] = useState<number>(0);
   const [currentCoins, setCurrentCoins] = useState<number>(0);
@@ -138,6 +147,13 @@ export default function App() {
     setCurrentCoins(0);
     setIsNewHighScore(false);
     setIsPaused(false);
+    setActivePowerUps({
+      magnet: false,
+      jetpack: false,
+      sneakers: false,
+      hoverboard: false,
+      hoverboardCount: stats.hoverboards !== undefined ? stats.hoverboards : 3,
+    });
     setGameState(GameState.PLAYING);
   };
 
@@ -152,7 +168,7 @@ export default function App() {
   };
 
   // Trigger: Captured by railway police
-  const handleGameOver = (finalScore: number, finalCoins: number) => {
+  const handleGameOver = (finalScore: number, finalCoins: number, finalHoverboardsCount?: number) => {
     const isNewHigh = finalScore > stats.highScore;
 
     const updatedStats: PlayerStats = {
@@ -160,6 +176,7 @@ export default function App() {
       coins: stats.coins + finalCoins,
       totalCoins: stats.totalCoins + finalCoins,
       highScore: isNewHigh ? finalScore : stats.highScore,
+      hoverboards: finalHoverboardsCount !== undefined ? finalHoverboardsCount : (stats.hoverboards || 0),
     };
 
     setIsNewHighScore(isNewHigh);
@@ -228,6 +245,20 @@ export default function App() {
     }
   };
 
+  // Trigger: Buy extra hoverboards
+  const handleBuyHoverboard = () => {
+    const cost = 150;
+    if (stats.coins >= cost) {
+      const updatedStats: PlayerStats = {
+        ...stats,
+        coins: stats.coins - cost,
+        hoverboards: (stats.hoverboards || 0) + 1,
+      };
+      saveStats(updatedStats);
+      audio.playPowerUp();
+    }
+  };
+
   // Trigger: Factory reset (clear localStorage and stats)
   const handleResetStats = () => {
     if (window.confirm('Reset all your gold coins, high scores, and outfits?')) {
@@ -265,6 +296,8 @@ export default function App() {
           onGameOver={handleGameOver}
           isPaused={isPaused}
           setIsPaused={setIsPaused}
+          onPowerUpsUpdated={setActivePowerUps}
+          hoverboardCount={stats.hoverboards !== undefined ? stats.hoverboards : 3}
         />
 
         {/* Home Dashboard Screen */}
@@ -276,6 +309,7 @@ export default function App() {
             onEquipSkin={handleEquipSkin}
             onUnlockSkin={handleUnlockSkin}
             onBuyUpgrade={handleBuyUpgrade}
+            onBuyHoverboard={handleBuyHoverboard}
             onResetStats={handleResetStats}
           />
         )}
@@ -286,10 +320,11 @@ export default function App() {
             score={currentScore}
             highScore={stats.highScore}
             coins={currentCoins}
-            activeMagnet={currentScore > 0 && stats.upgrades.magnetLevel > 0} // visual status bindings passed
-            activeJetpack={currentScore > 0 && stats.upgrades.jetpackLevel > 0}
-            activeSneakers={currentScore > 0 && stats.upgrades.sneakersLevel > 0}
-            activeHoverboard={currentScore > 0 && stats.upgrades.hoverboardLevel > 0}
+            activeMagnet={activePowerUps.magnet}
+            activeJetpack={activePowerUps.jetpack}
+            activeSneakers={activePowerUps.sneakers}
+            activeHoverboard={activePowerUps.hoverboard}
+            hoverboardCount={activePowerUps.hoverboardCount}
             isPaused={isPaused}
             setIsPaused={setIsPaused}
             onExitGame={handleExitGame}

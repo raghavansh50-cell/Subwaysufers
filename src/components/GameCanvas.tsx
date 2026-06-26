@@ -211,9 +211,11 @@ interface GameCanvasProps {
   upgrades: UpgradeState;
   onCoinCollected: (count: number) => void;
   onScoreUpdated: (score: number) => void;
-  onGameOver: (finalScore: number, finalCoins: number) => void;
+  onGameOver: (finalScore: number, finalCoins: number, finalHoverboardsCount: number) => void;
   isPaused: boolean;
   setIsPaused: (paused: boolean) => void;
+  onPowerUpsUpdated?: (active: { magnet: boolean; jetpack: boolean; sneakers: boolean; hoverboard: boolean; hoverboardCount: number }) => void;
+  hoverboardCount: number;
 }
 
 export default function GameCanvas({
@@ -227,6 +229,8 @@ export default function GameCanvas({
   onGameOver,
   isPaused,
   setIsPaused,
+  onPowerUpsUpdated,
+  hoverboardCount,
 }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -311,10 +315,13 @@ export default function GameCanvas({
     elapsedTime: 0,
     spawnZ: GAME_CONSTANTS.MIN_SPAWN_Z,
     animationFrameId: 0,
+    hoverboardCount: 1,
   });
 
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastStatesRef = useRef({ magnet: false, jetpack: false, sneakers: false, hoverboard: false, count: -1 });
+  const lastTapRef = useRef<number>(0);
 
   // Handle Resizing
   useEffect(() => {
@@ -351,9 +358,15 @@ export default function GameCanvas({
       }
       if (playerGroupRef.current) {
         playerGroupRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.name === 'visor') {
-            if (child.material instanceof THREE.MeshBasicMaterial) {
-              child.material.color.set(activeSkinAccent);
+          if (child instanceof THREE.Mesh) {
+            if (child.name === 'visor' || child.name === 'headphone_glow' || child.name === 'sole_left' || child.name === 'sole_right' || child.name === 'hoverboard_glow' || child.name === 'hoverboard_glow_exhaust' || child.name === 'jetpack_glow' || child.name === 'jetpack_glow_nozzle') {
+              if (child.material instanceof THREE.MeshBasicMaterial || child.material instanceof THREE.MeshStandardMaterial) {
+                child.material.color.set(activeSkinAccent);
+              }
+            } else if (child.name === 'cap_dome' || child.name === 'left_glove' || child.name === 'right_glove' || child.name === 'hoverboard_deck') {
+              if (child.material instanceof THREE.MeshStandardMaterial) {
+                child.material.color.set(activeSkinColor);
+              }
             }
           }
         });
@@ -535,66 +548,205 @@ export default function GameCanvas({
     const skinMat = new THREE.MeshStandardMaterial({ color: '#ffcc99', roughness: 0.5 });
     const visorMat = new THREE.MeshBasicMaterial({ color: '#00e5ff' });
 
+    // Torso with tactical chest harness and details
     const torsoGeo = new THREE.BoxGeometry(0.5, 0.8, 0.3);
     const torso = new THREE.Mesh(torsoGeo, bodyMat);
     torso.position.y = 0.8;
     playerGroup.add(torso);
     playerLimbsRef.current.torso = torso;
 
+    // Tactical gear straps
+    const harnessVert = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.8, 0.32), new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.8 }));
+    harnessVert.position.set(-0.12, 0, 0.01);
+    torso.add(harnessVert);
+
+    const harnessVertR = harnessVert.clone();
+    harnessVertR.position.x = 0.12;
+    torso.add(harnessVertR);
+
+    const harnessHoriz = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.08, 0.32), new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.8 }));
+    harnessHoriz.position.set(0, 0.1, 0.01);
+    torso.add(harnessHoriz);
+
+    // Head
     const headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
     const head = new THREE.Mesh(headGeo, skinMat);
     head.position.y = 1.45;
     playerGroup.add(head);
 
+    // Backwards Baseball Cap
+    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ff9800', roughness: 0.4 }));
+    capDome.name = 'cap_dome';
+    capDome.position.set(0, 0.12, 0);
+    head.add(capDome);
+
+    const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.02, 0.16), new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.5 }));
+    capBrim.position.set(0, 0.13, 0.18); // Facing backwards
+    head.add(capBrim);
+
+    // Wireless Cyber Headphones
+    const headphoneBand = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.05, 0.12), new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.4 }));
+    headphoneBand.position.set(0, 0.15, 0);
+    head.add(headphoneBand);
+
+    const leftCup = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.12), new THREE.MeshStandardMaterial({ color: '#252525', roughness: 0.3 }));
+    leftCup.position.set(-0.18, 0, 0);
+    head.add(leftCup);
+
+    const leftCupGlow = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.07, 0.07), new THREE.MeshBasicMaterial({ color: '#00e5ff' }));
+    leftCupGlow.name = 'headphone_glow';
+    leftCupGlow.position.set(-0.215, 0, 0);
+    head.add(leftCupGlow);
+
+    const rightCup = leftCup.clone();
+    rightCup.position.x = 0.18;
+    head.add(rightCup);
+
+    const rightCupGlow = leftCupGlow.clone();
+    rightCupGlow.position.x = 0.215;
+    head.add(rightCupGlow);
+
+    // Visor
     const visorGeo = new THREE.BoxGeometry(0.37, 0.1, 0.08);
     const visor = new THREE.Mesh(visorGeo, visorMat);
     visor.name = 'visor';
     visor.position.set(0, 1.48, -0.16);
     playerGroup.add(visor);
 
+    // Legs & sneakers with neon soles
     const legGeo = new THREE.BoxGeometry(0.15, 0.55, 0.15);
     const leftLeg = new THREE.Mesh(legGeo, limbMat);
     leftLeg.position.set(-0.16, 0.275, 0);
     playerGroup.add(leftLeg);
     playerLimbsRef.current.leftLeg = leftLeg;
 
+    const leftSneakerGroup = new THREE.Group();
+    leftSneakerGroup.position.set(0, -0.275, -0.04);
+    const sneakerUpperL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.28), bodyMat);
+    sneakerUpperL.name = 'cap_dome'; // Matches primary skin color
+    sneakerUpperL.position.set(0, 0.06, 0);
+    leftSneakerGroup.add(sneakerUpperL);
+    const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: '#00e5ff' }));
+    soleL.name = 'sole_left';
+    soleL.position.set(0, 0.02, 0);
+    leftSneakerGroup.add(soleL);
+    leftLeg.add(leftSneakerGroup);
+
     const rightLeg = new THREE.Mesh(legGeo, limbMat);
     rightLeg.position.set(0.16, 0.275, 0);
     playerGroup.add(rightLeg);
     playerLimbsRef.current.rightLeg = rightLeg;
 
+    const rightSneakerGroup = new THREE.Group();
+    rightSneakerGroup.position.set(0, -0.275, -0.04);
+    const sneakerUpperR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.28), bodyMat);
+    sneakerUpperR.name = 'cap_dome'; // Matches primary skin color
+    sneakerUpperR.position.set(0, 0.06, 0);
+    rightSneakerGroup.add(sneakerUpperR);
+    const soleR = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: '#00e5ff' }));
+    soleR.name = 'sole_right';
+    soleR.position.set(0, 0.02, 0);
+    rightSneakerGroup.add(soleR);
+    rightLeg.add(rightSneakerGroup);
+
+    // Arms & cuffs
     const armGeo = new THREE.BoxGeometry(0.12, 0.55, 0.12);
     const leftArm = new THREE.Mesh(armGeo, limbMat);
     leftArm.position.set(-0.32, 0.8, 0);
     playerGroup.add(leftArm);
     playerLimbsRef.current.leftArm = leftArm;
 
+    const leftGlove = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), bodyMat);
+    leftGlove.name = 'left_glove';
+    leftGlove.position.set(0, -0.21, 0);
+    leftArm.add(leftGlove);
+
     const rightArm = new THREE.Mesh(armGeo, limbMat);
     rightArm.position.set(0.32, 0.8, 0);
     playerGroup.add(rightArm);
     playerLimbsRef.current.rightArm = rightArm;
 
-    const hoverboardGeo = new THREE.BoxGeometry(0.8, 0.05, 1.6);
-    const hoverboardMat = new THREE.MeshStandardMaterial({ color: '#9c27b0', roughness: 0.1, metalness: 0.8 });
-    const hoverboard = new THREE.Mesh(hoverboardGeo, hoverboardMat);
+    const rightGlove = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), bodyMat);
+    rightGlove.name = 'right_glove';
+    rightGlove.position.set(0, -0.21, 0);
+    rightArm.add(rightGlove);
+
+    // High-tech Aerodynamic Hoverboard
+    const hoverboard = new THREE.Group();
     hoverboard.position.set(0, -0.05, 0);
     hoverboard.visible = false;
     playerGroup.add(hoverboard);
     playerLimbsRef.current.hoverboard = hoverboard;
 
+    const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.06, 1.45), new THREE.MeshStandardMaterial({ color: '#2b1c3a', metalness: 0.8, roughness: 0.2 }));
+    deckMesh.name = 'hoverboard_deck';
+    hoverboard.add(deckMesh);
+
+    const tractionGlow = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.02, 1.15), new THREE.MeshBasicMaterial({ color: '#d500f9' }));
+    tractionGlow.name = 'hoverboard_glow';
+    tractionGlow.position.set(0, 0.04, 0);
+    hoverboard.add(tractionGlow);
+
+    const engineL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.08, 0.38, 8), new THREE.MeshStandardMaterial({ color: '#444444', metalness: 0.9, roughness: 0.15 }));
+    engineL.rotateX(Math.PI / 2);
+    engineL.position.set(-0.2, -0.1, 0.15);
+    hoverboard.add(engineL);
+
+    const engineR = engineL.clone();
+    engineR.position.x = 0.2;
+    hoverboard.add(engineR);
+
+    const engineGlowL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 8), new THREE.MeshBasicMaterial({ color: '#d500f9' }));
+    engineGlowL.name = 'hoverboard_glow_exhaust';
+    engineGlowL.rotateX(Math.PI / 2);
+    engineGlowL.position.set(-0.2, -0.1, 0.35);
+    hoverboard.add(engineGlowL);
+
+    const engineGlowR = engineGlowL.clone();
+    engineGlowR.position.x = 0.2;
+    hoverboard.add(engineGlowR);
+
+    // Back-mounted Fusion Jetpack
     const jetpackGroup = new THREE.Group();
     jetpackGroup.position.set(0, 0.8, 0.18);
-    const jetpackCyl = new THREE.CylinderGeometry(0.12, 0.12, 0.5, 8);
-    const jetpackMat = new THREE.MeshStandardMaterial({ color: '#00bcd4', roughness: 0.2, metalness: 0.8 });
-    const jetL = new THREE.Mesh(jetpackCyl, jetpackMat);
-    jetL.position.x = -0.12;
-    const jetR = jetL.clone();
-    jetR.position.x = 0.12;
-    jetpackGroup.add(jetL);
-    jetpackGroup.add(jetR);
     jetpackGroup.visible = false;
     playerGroup.add(jetpackGroup);
     playerLimbsRef.current.jetpack = jetpackGroup;
+
+    const jetpackCore = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.16), new THREE.MeshStandardMaterial({ color: '#252525', metalness: 0.8, roughness: 0.2 }));
+    jetpackGroup.add(jetpackCore);
+
+    const powerBar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.02), new THREE.MeshBasicMaterial({ color: '#00e5ff' }));
+    powerBar.name = 'jetpack_glow';
+    powerBar.position.set(0, 0, 0.09);
+    jetpackGroup.add(powerBar);
+
+    const jetpackCyl = new THREE.CylinderGeometry(0.11, 0.09, 0.42, 8);
+    const jetpackMat = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.1, metalness: 0.9 });
+    const jetL = new THREE.Mesh(jetpackCyl, jetpackMat);
+    jetL.position.set(-0.16, -0.05, 0.03);
+    jetpackGroup.add(jetL);
+
+    const jetR = jetL.clone();
+    jetR.position.x = 0.16;
+    jetpackGroup.add(jetR);
+
+    const nozzleL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.08, 8), new THREE.MeshStandardMaterial({ color: '#333333', metalness: 0.8 }));
+    nozzleL.position.set(-0.16, -0.28, 0.03);
+    jetpackGroup.add(nozzleL);
+
+    const nozzleR = nozzleL.clone();
+    nozzleR.position.x = 0.16;
+    jetpackGroup.add(nozzleR);
+
+    const jetpackFlameGlowL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 8), new THREE.MeshBasicMaterial({ color: '#00e5ff' }));
+    jetpackFlameGlowL.name = 'jetpack_glow_nozzle';
+    jetpackFlameGlowL.position.set(-0.16, -0.33, 0.03);
+    jetpackGroup.add(jetpackFlameGlowL);
+
+    const jetpackFlameGlowR = jetpackFlameGlowL.clone();
+    jetpackFlameGlowR.position.x = 0.16;
+    jetpackGroup.add(jetpackFlameGlowR);
 
     // Create Police 3D Model
     const policeGroup = new THREE.Group();
@@ -696,8 +848,11 @@ export default function GameCanvas({
     state.powerUps = [];
     state.particles = [];
     state.activePowerUps = {} as Record<PowerUpType, number>;
+    state.hoverboardCount = hoverboardCount;
     state.elapsedTime = 0;
     state.spawnZ = GAME_CONSTANTS.MIN_SPAWN_Z;
+
+    lastStatesRef.current = { magnet: false, jetpack: false, sneakers: false, hoverboard: false, count: -1 };
 
     // Spawn 150 meters empty starter safe zone
     state.spawnZ = 40;
@@ -891,6 +1046,15 @@ export default function GameCanvas({
     return lanes[Math.floor(Math.random() * lanes.length)];
   };
 
+  // Custom Event listener for external HUD activation
+  useEffect(() => {
+    const handleExternalActivate = () => {
+      activateHoverboard();
+    };
+    window.addEventListener('activate-hoverboard', handleExternalActivate);
+    return () => window.removeEventListener('activate-hoverboard', handleExternalActivate);
+  }, [gameState, isPaused, upgrades]);
+
   // Keyboard Event Handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -921,15 +1085,32 @@ export default function GameCanvas({
         case 'P':
           setIsPaused(true);
           break;
+        case 'Shift':
+        case 'e':
+        case 'E':
+        case 'b':
+        case 'B':
+          activateHoverboard();
+          break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, isPaused]);
+  }, [gameState, isPaused, upgrades]);
 
   // Touch & Swipe gestures
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (gameState !== GameState.PLAYING || isPaused) return;
+
+    // Double tap/click detection
+    const nowTap = Date.now();
+    if (nowTap - lastTapRef.current < 280) {
+      activateHoverboard();
+      lastTapRef.current = 0;
+      return;
+    }
+    lastTapRef.current = nowTap;
+
     const x = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
     touchStartRef.current = { x, y };
@@ -988,6 +1169,29 @@ export default function GameCanvas({
     player.slideTimeRemaining = GAME_CONSTANTS.SLIDE_DURATION;
     audio.playSlide();
     spawnSparkParticles(player.laneOffset * GAME_CONSTANTS.LANE_WIDTH, player.y, GAME_CONSTANTS.PLAYER_Z, 4, '#cccccc');
+  };
+
+  const activateHoverboard = () => {
+    const state = stateRef.current;
+    if (gameState !== GameState.PLAYING || isPaused) return;
+    if (state.hoverboardCount > 0) {
+      const now = Date.now();
+      const isAlreadyActive = state.activePowerUps['HOVERBOARD'] > now;
+      const bonus = 10000 + (upgrades.hoverboardLevel - 1) * 2500;
+      state.activePowerUps['HOVERBOARD'] = (isAlreadyActive ? state.activePowerUps['HOVERBOARD'] : now) + bonus;
+      state.hoverboardCount--;
+      audio.playPowerUp();
+      state.camera.shake = 12;
+      spawnSparkParticles(state.player.laneOffset * GAME_CONSTANTS.LANE_WIDTH, state.player.y, GAME_CONSTANTS.PLAYER_Z, 25, '#ab47bc');
+
+      onPowerUpsUpdated?.({
+        magnet: state.activePowerUps['MAGNET'] > now,
+        jetpack: state.activePowerUps['JETPACK'] > now,
+        sneakers: state.activePowerUps['SNEAKERS'] > now,
+        hoverboard: true,
+        hoverboardCount: state.hoverboardCount,
+      });
+    }
   };
 
   const spawnSparkParticles = (x: number, y: number, z: number, count: number, color: string) => {
@@ -1065,6 +1269,17 @@ export default function GameCanvas({
       if (isHoverboarding && state.player.isGrounded && Math.random() < 0.35) {
         // High energy cyberpunk purple trails trailing behind the board
         spawnSparkParticles(state.player.laneOffset * GAME_CONSTANTS.LANE_WIDTH, state.player.y, GAME_CONSTANTS.PLAYER_Z + 0.5, 2, '#d500f9');
+      }
+
+      if (state.player.isGrounded && !isHoverboarding && !state.player.isSliding && Math.random() < 0.22) {
+        // Neon sneaker sole trail sparks matching the active skin accent
+        spawnSparkParticles(
+          state.player.laneOffset * GAME_CONSTANTS.LANE_WIDTH + (Math.random() * 0.2 - 0.1),
+          state.player.y + 0.05,
+          GAME_CONSTANTS.PLAYER_Z + 0.3,
+          1,
+          activeSkinAccent
+        );
       }
 
       if (state.player.isSliding) {
@@ -1169,6 +1384,30 @@ export default function GameCanvas({
 
     // Collisions
     checkCollisions(now);
+
+    // Call onPowerUpsUpdated if active status or count changed
+    const activeMagnet = state.activePowerUps['MAGNET'] > now;
+    const activeJetpack = state.activePowerUps['JETPACK'] > now;
+    const activeSneakers = state.activePowerUps['SNEAKERS'] > now;
+    const activeHoverboard = state.activePowerUps['HOVERBOARD'] > now;
+    const count = state.hoverboardCount || 0;
+
+    if (
+      activeMagnet !== lastStatesRef.current.magnet ||
+      activeJetpack !== lastStatesRef.current.jetpack ||
+      activeSneakers !== lastStatesRef.current.sneakers ||
+      activeHoverboard !== lastStatesRef.current.hoverboard ||
+      count !== lastStatesRef.current.count
+    ) {
+      lastStatesRef.current = { magnet: activeMagnet, jetpack: activeJetpack, sneakers: activeSneakers, hoverboard: activeHoverboard, count };
+      onPowerUpsUpdated?.({
+        magnet: activeMagnet,
+        jetpack: activeJetpack,
+        sneakers: activeSneakers,
+        hoverboard: activeHoverboard,
+        hoverboardCount: count,
+      });
+    }
   };
 
   const checkCollisions = (now: number) => {
@@ -1214,7 +1453,18 @@ export default function GameCanvas({
         if (pw.type === 'SNEAKERS') bonus += (upgrades.sneakersLevel - 1) * 2500;
         if (pw.type === 'HOVERBOARD') bonus += (upgrades.hoverboardLevel - 1) * 2500;
 
-        state.activePowerUps[pw.type] = now + bonus;
+        if (pw.type === 'HOVERBOARD') {
+          state.hoverboardCount = (state.hoverboardCount || 0) + 1;
+          onPowerUpsUpdated?.({
+            magnet: state.activePowerUps['MAGNET'] > now,
+            jetpack: state.activePowerUps['JETPACK'] > now,
+            sneakers: state.activePowerUps['SNEAKERS'] > now,
+            hoverboard: state.activePowerUps['HOVERBOARD'] > now,
+            hoverboardCount: state.hoverboardCount,
+          });
+        } else {
+          state.activePowerUps[pw.type] = now + bonus;
+        }
         state.camera.shake = 12;
 
         const color = pw.type === 'MAGNET' ? '#ff3333' : pw.type === 'JETPACK' ? '#00e5ff' : pw.type === 'HOVERBOARD' ? '#ab47bc' : '#66bb6a';
@@ -1341,7 +1591,7 @@ export default function GameCanvas({
 
     cancelAnimationFrame(state.animationFrameId);
     audio.stopMusic();
-    onGameOver(state.stats.score, state.stats.coins);
+    onGameOver(state.stats.score, state.stats.coins, state.hoverboardCount);
   };
 
   // Sync ThreeJS Scene elements with Physics state
