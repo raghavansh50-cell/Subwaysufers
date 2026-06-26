@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Subway Surfers</title>
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="./manifest.json" />
     <meta name="theme-color" content="#0d0f22" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Subway Surfers" />
-    <link rel="apple-touch-icon" href="/icon-512.jpg" />
+    <link rel="apple-touch-icon" href="./icon-512.jpg" />
   </head>
   <body>
     <div id="root"></div>
@@ -17,7 +17,7 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('./sw.js')
             .then((reg) => {
               console.log('PWA ServiceWorker registered successfully:', reg.scope);
               
@@ -38,12 +38,17 @@
                         return (isLocal || isFont) && isSymmetric;
                       });
 
+                    // Compute dynamic base path for path-agnostic offline support
+                    const basePath = window.location.pathname.endsWith('/') 
+                      ? window.location.pathname 
+                      : window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+
                     // Add main document and manifest
                     const finalUrls = Array.from(new Set([
-                      window.location.origin + '/',
-                      window.location.origin + '/index.html',
-                      window.location.origin + '/manifest.json',
-                      window.location.origin + '/icon-512.jpg',
+                      window.location.origin + basePath,
+                      window.location.origin + basePath + 'index.html',
+                      window.location.origin + basePath + 'manifest.json',
+                      window.location.origin + basePath + 'icon-512.jpg',
                       ...urlsToCache
                     ]));
 

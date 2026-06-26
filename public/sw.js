@@ -1,9 +1,9 @@
 const CACHE_NAME = 'subway-surfers-3d-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-512.jpg'
+  './',
+  'index.html',
+  'manifest.json',
+  'icon-512.jpg'
 ];
 
 // Install Event - cache initial core shell files
@@ -47,10 +47,21 @@ self.addEventListener('fetch', (event) => {
   // 1. Navigation requests (e.g. page refresh, going to subpaths): fallback to root index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/').then((response) => {
-        return response || caches.match('/index.html') || fetch(event.request);
+      caches.match(event.request).then((response) => {
+        if (response) return response;
+        // If exact URL matches failed, try matching root paths relative to scope
+        return caches.match('./').then((rootResponse) => {
+          if (rootResponse) return rootResponse;
+          return caches.match('index.html').then((indexResponse) => {
+            if (indexResponse) return indexResponse;
+            // Fallback to network
+            return fetch(event.request);
+          });
+        });
       }).catch(() => {
-        return caches.match('/index.html');
+        return caches.match('index.html').then((indexResponse) => {
+          return indexResponse || fetch(event.request);
+        });
       })
     );
     return;

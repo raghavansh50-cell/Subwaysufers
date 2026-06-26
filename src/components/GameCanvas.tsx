@@ -122,6 +122,58 @@ function createTrainTexture(colorHex: string): THREE.CanvasTexture {
   return texture;
 }
 
+function createRampTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    // Solid warning yellow base color
+    ctx.fillStyle = '#ffc107'; // High-vis yellow
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Thick solid black diagonal warning caution stripes!
+    ctx.fillStyle = '#1e1e24'; // Rich deep black
+    const stripeWidth = 28;
+    for (let i = -10; i < 20; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * 50, 0);
+      ctx.lineTo(i * 50 + stripeWidth, 0);
+      ctx.lineTo(i * 50 + stripeWidth - 65, 256);
+      ctx.lineTo(i * 50 - 65, 256);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Border and metallic outline panels
+    ctx.strokeStyle = '#37474f';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, 246, 246);
+
+    // Industrial treadplate texture details (non-slip grip marks)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 3;
+    for (let x = 35; x < 235; x += 45) {
+      for (let y = 35; y < 235; y += 45) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 12, y + 6);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x + 20, y + 20);
+        ctx.lineTo(x + 8, y + 26);
+        ctx.stroke();
+      }
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function createPowerupTexture(type: string, colorHex: string, glowHex: string): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -249,6 +301,7 @@ export default function GameCanvas({
     coin?: THREE.CanvasTexture;
     trainRed?: THREE.CanvasTexture;
     trainBlue?: THREE.CanvasTexture;
+    ramp?: THREE.CanvasTexture;
     magnet?: THREE.CanvasTexture;
     jetpack?: THREE.CanvasTexture;
     sneakers?: THREE.CanvasTexture;
@@ -408,6 +461,11 @@ export default function GameCanvas({
     texturesRef.current.coin = createCoinTexture();
     texturesRef.current.trainRed = createTrainTexture('#e53935'); // Vibrant red panel texture
     texturesRef.current.trainBlue = createTrainTexture('#1e88e5'); // Cool blue panel texture
+    const rampTex = createRampTexture();
+    rampTex.wrapS = THREE.RepeatWrapping;
+    rampTex.wrapT = THREE.RepeatWrapping;
+    rampTex.repeat.set(1.5, 2.5);
+    texturesRef.current.ramp = rampTex;
     texturesRef.current.magnet = createPowerupTexture('MAGNET', '#ff1744', '#ff8a80');
     texturesRef.current.jetpack = createPowerupTexture('JETPACK', '#00e5ff', '#80deea');
     texturesRef.current.sneakers = createPowerupTexture('SNEAKERS', '#00e676', '#a7ffeb');
@@ -886,74 +944,135 @@ export default function GameCanvas({
     const z = state.spawnZ;
     const rand = Math.random();
 
-    if (rand < 0.25) {
-      // Standard coin layouts
-      const lane = getRandomLane();
-      const count = Math.floor(Math.random() * 4) + 3;
-      const coinY = Math.random() < 0.3 ? 3.5 : 0.8;
-      for (let i = 0; i < count; i++) {
-        state.coins.push({
-          id: `coin-${z}-${i}`,
-          x: lane * GAME_CONSTANTS.LANE_WIDTH,
-          y: coinY,
-          z: z + i * 4,
-          width: 1.2,
-          height: 1.2,
-          depth: 1.2,
-          rotation: Math.random() * Math.PI,
-          pulse: 0,
-        });
-      }
-    } else if (rand < 0.55) {
-      // Spawn standard obstacle Trains!
-      const lane = getRandomLane();
-      const isMoving = Math.random() < 0.3;
-      const hasRamp = Math.random() < 0.6 && !isMoving;
-      const trainLength = 32;
+    // Helper to spawn a single train with proper scaling, optional ramp, and perfectly placed coin line/top layout
+    const spawnTrainWithOptionalRamp = (lane: Lane, centerZ: number, length: number, isMoving: boolean, hasRamp: boolean) => {
+      const speed = isMoving ? -0.06 : 0;
+      const type = isMoving ? ObstacleType.TRAIN_MOVING : ObstacleType.TRAIN_STATIONARY;
+      const idSuffix = `${lane}-${centerZ}`;
 
       state.obstacles.push({
-        id: `train-${z}`,
-        type: isMoving ? ObstacleType.TRAIN_MOVING : ObstacleType.TRAIN_STATIONARY,
+        id: `train-${idSuffix}`,
+        type: type,
         lane: lane,
         x: lane * GAME_CONSTANTS.LANE_WIDTH,
         y: 0,
-        z: z,
+        z: centerZ,
         width: 2.8,
         height: 3.8,
-        depth: trainLength,
-        speed: isMoving ? -0.05 : 0,
+        depth: length,
+        speed: speed,
         hasCoinsOnTop: true,
       });
 
-      if (hasRamp) {
+      const halfLength = length / 2;
+
+      if (hasRamp && !isMoving) {
         state.obstacles.push({
-          id: `ramp-${z}`,
+          id: `ramp-${idSuffix}`,
           type: ObstacleType.RAMP,
           lane: lane,
           x: lane * GAME_CONSTANTS.LANE_WIDTH,
           y: 0,
-          z: z - 8,
-          width: 2.6,
-          height: 1.8,
+          z: centerZ - halfLength - 4, // Aligned flush to train front
+          width: 2.8,
+          height: 3.8,
           depth: 8,
+          speed: speed,
         });
-      }
 
-      // Spawn coins above train
-      for (let i = 0; i < 5; i++) {
-        state.coins.push({
-          id: `coin-train-${z}-${i}`,
-          x: lane * GAME_CONSTANTS.LANE_WIDTH,
-          y: 4.6,
-          z: z + 2 + i * 6,
-          width: 1.2,
-          height: 1.2,
-          depth: 1.2,
-          rotation: Math.random() * Math.PI,
-          pulse: 0,
+        // Coins scaling up the ramp and continuing on the roof
+        const rampCoins = [
+          { offset: -halfLength - 6, y: 1.8 },
+          { offset: -halfLength - 2, y: 3.5 },
+          { offset: -halfLength + 2, y: 4.6 },
+          { offset: -halfLength + 8, y: 4.6 },
+          { offset: -halfLength + 14, y: 4.6 },
+          { offset: -halfLength + 20, y: 4.6 },
+          { offset: -halfLength + 26, y: 4.6 },
+        ];
+
+        rampCoins.forEach((pos, i) => {
+          state.coins.push({
+            id: `coin-train-ramp-${idSuffix}-${i}`,
+            x: lane * GAME_CONSTANTS.LANE_WIDTH,
+            y: pos.y,
+            z: centerZ + pos.offset,
+            width: 1.2,
+            height: 1.2,
+            depth: 1.2,
+            rotation: Math.random() * Math.PI,
+            pulse: 0,
+          });
         });
+      } else {
+        // Flat centered coins on top of the train
+        const numCoins = Math.floor(length / 6);
+        const startOffset = -halfLength + 4;
+        for (let i = 0; i < numCoins; i++) {
+          state.coins.push({
+            id: `coin-train-${idSuffix}-${i}`,
+            x: lane * GAME_CONSTANTS.LANE_WIDTH,
+            y: 4.6,
+            z: centerZ + startOffset + i * 6,
+            width: 1.2,
+            height: 1.2,
+            depth: 1.2,
+            rotation: Math.random() * Math.PI,
+            pulse: 0,
+          });
+        }
       }
-    } else if (rand < 0.8) {
+    };
+
+    if (rand < 0.65) {
+      // 65% chance: High-Density Subway Train layouts
+      const subPattern = Math.random();
+      
+      if (subPattern < 0.28) {
+        // Pattern 1: Double Train (Adjacent with Ramp)
+        // One train with ramp, another train starting slightly staggered in an adjacent lane
+        const mainLane = getRandomLane();
+        const sideLane = mainLane === Lane.CENTER ? (Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT) : Lane.CENTER;
+        
+        spawnTrainWithOptionalRamp(mainLane, z, 32, false, true);
+        spawnTrainWithOptionalRamp(sideLane, z + 8, 32, Math.random() < 0.3, false);
+        
+        state.spawnZ += 40;
+      } else if (subPattern < 0.56) {
+        // Pattern 2: Leapfrog (Continuous Train Roof Hopping!)
+        // Three staggered trains allowing the player to climb left/right and stay entirely in the air
+        const startLane = Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT;
+        const middleLane = Lane.CENTER;
+        const endLane = startLane === Lane.LEFT ? Lane.RIGHT : Lane.LEFT;
+        
+        // Train 1: Ramp climbing train
+        spawnTrainWithOptionalRamp(startLane, z - 8, 32, false, true);
+        // Train 2: Mid train (overlapping, flat)
+        spawnTrainWithOptionalRamp(middleLane, z + 12, 32, false, false);
+        // Train 3: End train (overlapping, stationary or moving)
+        spawnTrainWithOptionalRamp(endLane, z + 32, 32, Math.random() < 0.4, false);
+        
+        state.spawnZ += 64;
+      } else if (subPattern < 0.82) {
+        // Pattern 3: Massive Train Highway (3 Lanes)
+        // Left and Right lanes have ramps, Center lane has an oncoming moving train!
+        // Player has to climb Left or Right, leap between them, and avoid the center threat.
+        spawnTrainWithOptionalRamp(Lane.LEFT, z, 32, false, true);
+        spawnTrainWithOptionalRamp(Lane.RIGHT, z + 8, 32, false, true);
+        spawnTrainWithOptionalRamp(Lane.CENTER, z + 24, 32, true, false); // Oncoming train
+        
+        state.spawnZ += 48;
+      } else {
+        // Pattern 4: The Long Runway (Continuous Double Length Train)
+        const lane = getRandomLane();
+        const sideLane = lane === Lane.CENTER ? (Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT) : Lane.CENTER;
+        
+        spawnTrainWithOptionalRamp(lane, z, 40, false, true);
+        spawnTrainWithOptionalRamp(sideLane, z + 20, 40, false, false); // adjacent, flat, overlaps
+        
+        state.spawnZ += 48;
+      }
+    } else if (rand < 0.78) {
       // Hurdles (Barricades)
       const layout = Math.random();
       if (layout < 0.5) {
@@ -992,7 +1111,8 @@ export default function GameCanvas({
           depth: 1.2,
         });
       }
-    } else if (rand < 0.92) {
+      state.spawnZ += 32;
+    } else if (rand < 0.88) {
       // Light pole scenery and warning coin arch
       state.obstacles.push({
         id: `pole-${z}`,
@@ -1020,7 +1140,8 @@ export default function GameCanvas({
           pulse: 0,
         });
       }
-    } else {
+      state.spawnZ += 32;
+    } else if (rand < 0.94) {
       // Spawn Powerup
       const types: PowerUpType[] = ['MAGNET', 'JETPACK', 'HOVERBOARD', 'SNEAKERS'];
       const pick = types[Math.floor(Math.random() * types.length)];
@@ -1037,8 +1158,27 @@ export default function GameCanvas({
         depth: 1.6,
         rotation: 0,
       });
+      state.spawnZ += 32;
+    } else {
+      // Standard ground coin layouts
+      const lane = getRandomLane();
+      const count = Math.floor(Math.random() * 4) + 3;
+      const coinY = Math.random() < 0.3 ? 3.5 : 0.8;
+      for (let i = 0; i < count; i++) {
+        state.coins.push({
+          id: `coin-${z}-${i}`,
+          x: lane * GAME_CONSTANTS.LANE_WIDTH,
+          y: coinY,
+          z: z + i * 4,
+          width: 1.2,
+          height: 1.2,
+          depth: 1.2,
+          rotation: Math.random() * Math.PI,
+          pulse: 0,
+        });
+      }
+      state.spawnZ += 32;
     }
-    state.spawnZ += 32;
   };
 
   const getRandomLane = (): Lane => {
@@ -1337,7 +1477,7 @@ export default function GameCanvas({
 
     // Scroll Obstacles
     state.obstacles.forEach((obs) => {
-      if (obs.type === ObstacleType.TRAIN_MOVING && obs.speed) {
+      if (obs.speed) {
         obs.z += obs.speed * 1.5 - runZ;
       } else {
         obs.z -= runZ;
@@ -1749,19 +1889,57 @@ export default function GameCanvas({
           group.add(leftHead);
           group.add(rightHead);
         } else if (obs.type === ObstacleType.RAMP) {
-          const rampGeo = new THREE.BoxGeometry(w, 0.15, d * 1.02);
-          const rampMesh = new THREE.Mesh(rampGeo, new THREE.MeshStandardMaterial({ color: '#e65100', roughness: 0.5, metalness: 0.4 }));
-          rampMesh.rotation.x = Math.atan(h / d);
-          rampMesh.position.set(0, h / 2, 0);
+          // A beautiful, authentic Subway Surfers style solid triangular wedge ramp!
+          // This perfectly integrates with the train behind it and has no ugly vertical walls.
+          const shape = new THREE.Shape();
+          shape.moveTo(0, 0); // Bottom-front
+          shape.lineTo(d, 0); // Bottom-back
+          shape.lineTo(d, h); // Top-back (full train height!)
+          shape.closePath();
+
+          const rampGeo = new THREE.ExtrudeGeometry(shape, {
+            depth: w,
+            bevelEnabled: false,
+          });
+
+          // Material 0 is for the triangular cap side-profiles, styled like the train metal!
+          const sideMat = new THREE.MeshStandardMaterial({
+            map: texturesRef.current.trainBlue,
+            color: '#37474f', // Industrial slate-blue metal
+            roughness: 0.35,
+            metalness: 0.8,
+          });
+
+          // Material 1 is for the extruded faces (the top sloped running surface)
+          const topMat = new THREE.MeshStandardMaterial({
+            map: texturesRef.current.ramp,
+            roughness: 0.3,
+            metalness: 0.75,
+          });
+
+          // Create the extruded mesh with both materials
+          const rampMesh = new THREE.Mesh(rampGeo, [sideMat, topMat]);
+
+          // Align the wedge perfectly: rotate 90 deg around Y so it slopes upward away from the camera,
+          // then translate so it is centered and sits exactly in front of the train!
+          rampMesh.rotation.y = Math.PI / 2;
+          rampMesh.position.set(-w / 2, 0, d / 2);
           group.add(rampMesh);
 
-          const sideGeo = new THREE.BoxGeometry(0.1, h, d);
-          const leftW = new THREE.Mesh(sideGeo, new THREE.MeshStandardMaterial({ color: '#5d4037', roughness: 0.8 }));
-          leftW.position.set(-w / 2, h / 2, 0);
-          const rightW = leftW.clone();
-          rightW.position.x = w / 2;
-          group.add(leftW);
-          group.add(rightW);
+          // Add beautiful hazard glowing amber neon light tubes running along the left & right top edges of the slope!
+          const slopeD = Math.sqrt(h * h + d * d);
+          const lightGeo = new THREE.BoxGeometry(0.08, 0.08, slopeD);
+          const lightMat = new THREE.MeshBasicMaterial({ color: '#ffb300' }); // Vibrant glowing amber indicator
+          
+          const leftLight = new THREE.Mesh(lightGeo, lightMat);
+          leftLight.position.set(-w / 2, h / 2 + 0.04, 0);
+          leftLight.rotation.x = -Math.atan(h / d); // Slopes up exactly matching the wedge profile
+          
+          const rightLight = leftLight.clone();
+          rightLight.position.x = w / 2;
+          
+          group.add(leftLight);
+          group.add(rightLight);
         } else if (obs.type === ObstacleType.BARRICADE_LOW) {
           const plank = new THREE.Mesh(new THREE.BoxGeometry(w, 0.32, 0.08), new THREE.MeshStandardMaterial({ color: '#d01717', roughness: 0.5 }));
           plank.position.set(0, h - 0.16, 0);
