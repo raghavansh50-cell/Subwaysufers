@@ -1213,6 +1213,31 @@ export default function GameCanvas({
     }
   };
 
+  const spawnBombBlast = (x: number, y: number, z: number) => {
+    const state = stateRef.current;
+    const colors = ['#ff3300', '#ff9900', '#ffcc00', '#ff5722', '#555555', '#333333'];
+    for (let i = 0; i < 50; i++) {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const size = color.startsWith('#55') || color.startsWith('#33')
+        ? Math.random() * 3.5 + 2.5
+        : Math.random() * 2.5 + 1.5;
+        
+      state.particles.push({
+        id: `blast-${Date.now()}-${Math.random()}-${i}`,
+        x: x + (Math.random() * 2 - 1) * 1.5,
+        y: y + (Math.random() * 2 - 1) * 1.5,
+        z: z + (Math.random() * 2 - 1) * 1.5,
+        vx: (Math.random() * 2 - 1) * 0.35,
+        vy: (Math.random() * 2 - 1) * 0.3 + 0.15,
+        vz: (Math.random() * 2 - 1) * 0.3,
+        color: color,
+        size: size,
+        life: 1.0,
+        decay: Math.random() * 0.015 + 0.015,
+      });
+    }
+  };
+
   // Core Physics Loop
   const updatePhysics = (currentTime: number) => {
     const state = stateRef.current;
@@ -1306,9 +1331,9 @@ export default function GameCanvas({
       spawnTrackSegment();
     }
 
-    // Scoring scaling
-    state.stats.score += Math.floor(runZ * 10 * state.player.stumbleMultiplier);
-    onScoreUpdated(state.stats.score);
+    // Scoring scaling (Slowing down score accumulation by scaling it to a more steady rate)
+    state.stats.score += runZ * 1.5 * state.player.stumbleMultiplier;
+    onScoreUpdated(Math.floor(state.stats.score));
 
     // Scroll Obstacles
     state.obstacles.forEach((obs) => {
@@ -1420,6 +1445,8 @@ export default function GameCanvas({
     const pH = state.player.isSliding ? 0.8 : 1.9;
     const pD = 1.3;
 
+    let collidedObstacleId: string | null = null;
+
     // Coin collisions
     state.coins.forEach((coin) => {
       if (coin.collected) return;
@@ -1530,9 +1557,12 @@ export default function GameCanvas({
         if (state.activePowerUps['HOVERBOARD'] > now) {
           state.activePowerUps['HOVERBOARD'] = 0;
           state.player.invincibilityTime = 1500;
-          state.camera.shake = 20;
+          state.camera.shake = 35; // Spectacular camera shake for the bomb blast!
           audio.playCrash();
-          spawnSparkParticles(pX, pY + pH / 2, pZ, 15, '#ab47bc');
+          
+          // Trigger spectacular bomb blast particle animation and flag obstacle for destruction
+          collidedObstacleId = obs.id;
+          spawnBombBlast(obs.x, obs.y + obs.height / 2, obs.z);
           return;
         }
 
@@ -1553,6 +1583,10 @@ export default function GameCanvas({
         }
       }
     });
+
+    if (collidedObstacleId) {
+      state.obstacles = state.obstacles.filter((obs) => obs.id !== collidedObstacleId);
+    }
 
     if (pY > 0 && !onTop) {
       if (pY < highestY) {
@@ -1591,7 +1625,7 @@ export default function GameCanvas({
 
     cancelAnimationFrame(state.animationFrameId);
     audio.stopMusic();
-    onGameOver(state.stats.score, state.stats.coins, state.hoverboardCount);
+    onGameOver(Math.floor(state.stats.score), state.stats.coins, state.hoverboardCount);
   };
 
   // Sync ThreeJS Scene elements with Physics state

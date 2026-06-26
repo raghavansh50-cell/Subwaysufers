@@ -117,9 +117,9 @@ export interface Particle {
 export const GAME_CONSTANTS = {
   TRACK_LENGTH: 1000,
   LANE_WIDTH: 3.5,
-  INITIAL_SPEED: 0.18,
-  SPEED_INCREMENT: 0.002, // Added per second
-  MAX_SPEED: 0.45,
+  INITIAL_SPEED: 0.26,
+  SPEED_INCREMENT: 0.005, // Added per second (makes the game speed scale faster)
+  MAX_SPEED: 0.65,
   GRAVITY: -0.012,
   JUMP_FORCE: 0.26,
   SNEAKERS_JUMP_FORCE: 0.35,
