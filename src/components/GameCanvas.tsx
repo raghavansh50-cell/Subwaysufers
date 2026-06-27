@@ -942,10 +942,9 @@ export default function GameCanvas({
   const spawnTrackSegment = () => {
     const state = stateRef.current;
     const z = state.spawnZ;
-    const rand = Math.random();
 
-    // Helper to spawn a single train with proper scaling, optional ramp, and perfectly placed coin line/top layout
-    const spawnTrainWithOptionalRamp = (lane: Lane, centerZ: number, length: number, isMoving: boolean, hasRamp: boolean) => {
+    // Helpers to create entities with uniform scaling, positions, and tags
+    const spawnTrain = (lane: Lane, centerZ: number, length: number = 32, isMoving: boolean = false, hasRamp: boolean = false) => {
       const speed = isMoving ? -0.06 : 0;
       const type = isMoving ? ObstacleType.TRAIN_MOVING : ObstacleType.TRAIN_STATIONARY;
       const idSuffix = `${lane}-${centerZ}`;
@@ -980,7 +979,7 @@ export default function GameCanvas({
           speed: speed,
         });
 
-        // Coins scaling up the ramp and continuing on the roof
+        // Coins scaling up the ramp and continuing on the roof in a clean arc
         const rampCoins = [
           { offset: -halfLength - 6, y: 1.8 },
           { offset: -halfLength - 2, y: 3.5 },
@@ -1024,115 +1023,41 @@ export default function GameCanvas({
       }
     };
 
-    if (rand < 0.65) {
-      // 65% chance: High-Density Subway Train layouts
-      const subPattern = Math.random();
-      
-      if (subPattern < 0.28) {
-        // Pattern 1: Double Train (Adjacent with Ramp)
-        // One train with ramp, another train starting slightly staggered in an adjacent lane
-        const mainLane = getRandomLane();
-        const sideLane = mainLane === Lane.CENTER ? (Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT) : Lane.CENTER;
-        
-        spawnTrainWithOptionalRamp(mainLane, z, 32, false, true);
-        spawnTrainWithOptionalRamp(sideLane, z + 8, 32, Math.random() < 0.3, false);
-        
-        state.spawnZ += 40;
-      } else if (subPattern < 0.56) {
-        // Pattern 2: Leapfrog (Continuous Train Roof Hopping!)
-        // Three staggered trains allowing the player to climb left/right and stay entirely in the air
-        const startLane = Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT;
-        const middleLane = Lane.CENTER;
-        const endLane = startLane === Lane.LEFT ? Lane.RIGHT : Lane.LEFT;
-        
-        // Train 1: Ramp climbing train
-        spawnTrainWithOptionalRamp(startLane, z - 8, 32, false, true);
-        // Train 2: Mid train (overlapping, flat)
-        spawnTrainWithOptionalRamp(middleLane, z + 12, 32, false, false);
-        // Train 3: End train (overlapping, stationary or moving)
-        spawnTrainWithOptionalRamp(endLane, z + 32, 32, Math.random() < 0.4, false);
-        
-        state.spawnZ += 64;
-      } else if (subPattern < 0.82) {
-        // Pattern 3: Massive Train Highway (3 Lanes)
-        // Left and Right lanes have ramps, Center lane has an oncoming moving train!
-        // Player has to climb Left or Right, leap between them, and avoid the center threat.
-        spawnTrainWithOptionalRamp(Lane.LEFT, z, 32, false, true);
-        spawnTrainWithOptionalRamp(Lane.RIGHT, z + 8, 32, false, true);
-        spawnTrainWithOptionalRamp(Lane.CENTER, z + 24, 32, true, false); // Oncoming train
-        
-        state.spawnZ += 48;
-      } else {
-        // Pattern 4: The Long Runway (Continuous Double Length Train)
-        const lane = getRandomLane();
-        const sideLane = lane === Lane.CENTER ? (Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT) : Lane.CENTER;
-        
-        spawnTrainWithOptionalRamp(lane, z, 40, false, true);
-        spawnTrainWithOptionalRamp(sideLane, z + 20, 40, false, false); // adjacent, flat, overlaps
-        
-        state.spawnZ += 48;
-      }
-    } else if (rand < 0.78) {
-      // Hurdles (Barricades)
-      const layout = Math.random();
-      if (layout < 0.5) {
-        state.obstacles.push({
-          id: `b-low-${z}`,
-          type: ObstacleType.BARRICADE_LOW,
-          lane: Lane.CENTER,
-          x: 0,
-          y: 0,
-          z: z,
-          width: 2.5,
-          height: 1.6,
-          depth: 1.2,
-        });
-        state.obstacles.push({
-          id: `b-high-${z}`,
-          type: ObstacleType.BARRICADE_HIGH,
-          lane: Math.random() < 0.5 ? Lane.LEFT : Lane.RIGHT,
-          x: (Math.random() < 0.5 ? -1 : 1) * GAME_CONSTANTS.LANE_WIDTH,
-          y: 0,
-          z: z + 8,
-          width: 2.5,
-          height: 3.2,
-          depth: 1.2,
-        });
-      } else {
-        state.obstacles.push({
-          id: `b-high-center-${z}`,
-          type: ObstacleType.BARRICADE_HIGH,
-          lane: Lane.CENTER,
-          x: 0,
-          y: 0,
-          z: z,
-          width: 2.5,
-          height: 3.2,
-          depth: 1.2,
-        });
-      }
-      state.spawnZ += 32;
-    } else if (rand < 0.88) {
-      // Light pole scenery and warning coin arch
+    const spawnBarricadeLow = (lane: Lane, spawnZ: number) => {
       state.obstacles.push({
-        id: `pole-${z}`,
-        type: ObstacleType.LIGHT_POLE,
-        lane: Lane.LEFT,
-        x: -1.8 * GAME_CONSTANTS.LANE_WIDTH,
+        id: `b-low-${lane}-${spawnZ}`,
+        type: ObstacleType.BARRICADE_LOW,
+        lane: lane,
+        x: lane * GAME_CONSTANTS.LANE_WIDTH,
         y: 0,
-        z: z,
-        width: 0.5,
-        height: 6,
-        depth: 0.5,
+        z: spawnZ,
+        width: 2.5,
+        height: 1.6,
+        depth: 1.2,
       });
+    };
 
-      for (let i = 0; i < 5; i++) {
-        const theta = (i / 4) * Math.PI;
+    const spawnBarricadeHigh = (lane: Lane, spawnZ: number) => {
+      state.obstacles.push({
+        id: `b-high-${lane}-${spawnZ}`,
+        type: ObstacleType.BARRICADE_HIGH,
+        lane: lane,
+        x: lane * GAME_CONSTANTS.LANE_WIDTH,
+        y: 0,
+        z: spawnZ,
+        width: 2.5,
+        height: 3.2,
+        depth: 1.2,
+      });
+    };
+
+    const spawnCoinLine = (lane: Lane, startZ: number, count: number, height: number = 0.8) => {
+      for (let i = 0; i < count; i++) {
         state.coins.push({
-          id: `coin-arch-${z}-${i}`,
-          x: 0,
-          y: 0.8 + Math.sin(theta) * 3,
-          z: z + i * 4,
+          id: `coin-${lane}-${startZ}-${i}`,
+          x: lane * GAME_CONSTANTS.LANE_WIDTH,
+          y: height,
+          z: startZ + i * 4,
           width: 1.2,
           height: 1.2,
           depth: 1.2,
@@ -1140,45 +1065,208 @@ export default function GameCanvas({
           pulse: 0,
         });
       }
-      state.spawnZ += 32;
-    } else if (rand < 0.94) {
-      // Spawn Powerup
+    };
+
+    const spawnCoinArch = (lane: Lane, startZ: number) => {
+      for (let i = 0; i < 5; i++) {
+        const theta = (i / 4) * Math.PI;
+        state.coins.push({
+          id: `coin-arch-${lane}-${startZ}-${i}`,
+          x: lane * GAME_CONSTANTS.LANE_WIDTH,
+          y: 0.8 + Math.sin(theta) * 3,
+          z: startZ + i * 4,
+          width: 1.2,
+          height: 1.2,
+          depth: 1.2,
+          rotation: Math.random() * Math.PI,
+          pulse: 0,
+        });
+      }
+    };
+
+    const spawnPowerUp = (lane: Lane, spawnZ: number) => {
       const types: PowerUpType[] = ['MAGNET', 'JETPACK', 'HOVERBOARD', 'SNEAKERS'];
       const pick = types[Math.floor(Math.random() * types.length)];
-      const lane = getRandomLane();
-
       state.powerUps.push({
-        id: `pw-${z}`,
+        id: `pw-${lane}-${spawnZ}`,
         type: pick,
         x: lane * GAME_CONSTANTS.LANE_WIDTH,
         y: 1.2,
-        z: z,
+        z: spawnZ,
         width: 1.6,
         height: 1.6,
         depth: 1.6,
         rotation: 0,
       });
-      state.spawnZ += 32;
-    } else {
-      // Standard ground coin layouts
-      const lane = getRandomLane();
-      const count = Math.floor(Math.random() * 4) + 3;
-      const coinY = Math.random() < 0.3 ? 3.5 : 0.8;
-      for (let i = 0; i < count; i++) {
-        state.coins.push({
-          id: `coin-${z}-${i}`,
-          x: lane * GAME_CONSTANTS.LANE_WIDTH,
-          y: coinY,
-          z: z + i * 4,
-          width: 1.2,
-          height: 1.2,
-          depth: 1.2,
-          rotation: Math.random() * Math.PI,
-          pulse: 0,
-        });
-      }
-      state.spawnZ += 32;
+    };
+
+    const spawnLightPole = (side: 'LEFT' | 'RIGHT', spawnZ: number) => {
+      const isLeft = side === 'LEFT';
+      state.obstacles.push({
+        id: `pole-${side}-${spawnZ}`,
+        type: ObstacleType.LIGHT_POLE,
+        lane: isLeft ? Lane.LEFT : Lane.RIGHT,
+        x: (isLeft ? -1.8 : 1.8) * GAME_CONSTANTS.LANE_WIDTH,
+        y: 0,
+        z: spawnZ,
+        width: 0.5,
+        height: 6,
+        depth: 0.5,
+      });
+    };
+
+    // 1. Safe Intro Zone for the first 120 meters
+    if (z < 120) {
+      spawnCoinLine(Lane.CENTER, z + 10, 5, 0.8);
+      spawnBarricadeLow(Lane.CENTER, z + 30);
+      spawnCoinArch(Lane.CENTER, z + 27);
+      spawnCoinLine(Lane.LEFT, z + 45, 6, 0.8);
+      spawnCoinLine(Lane.RIGHT, z + 45, 6, 0.8);
+
+      spawnLightPole('LEFT', z + 5);
+      spawnLightPole('RIGHT', z + 35);
+      state.spawnZ += 60;
+      return;
     }
+
+    // 2. Structured Layout Chunks Registry
+    const chunkGenerators = [
+      // Chunk A: TrainBlock Module (Length: 80)
+      // Left: Static Train. Center: Oncoming Train. Right: Low hurdle & coin arches. (Solvable Right Lane!)
+      () => {
+        const len = 80;
+        spawnTrain(Lane.LEFT, z + 30, 32, false, false);
+        spawnTrain(Lane.CENTER, z + 45, 32, true, false);
+
+        spawnBarricadeLow(Lane.RIGHT, z + 15);
+        spawnCoinArch(Lane.RIGHT, z + 12);
+        spawnCoinLine(Lane.RIGHT, z + 35, 6, 0.8);
+
+        spawnLightPole('LEFT', z + 10);
+        spawnLightPole('RIGHT', z + 50);
+        return len;
+      },
+
+      // Chunk B: RampSetup Module (Length: 80)
+      // Center: Ramp Train (optimal coin track!). Left: Low barricade. Right: High barricade. (All lanes solvable!)
+      () => {
+        const len = 80;
+        spawnTrain(Lane.CENTER, z + 35, 32, false, true);
+
+        spawnBarricadeLow(Lane.LEFT, z + 12);
+        spawnCoinLine(Lane.LEFT, z + 25, 5, 0.8);
+
+        spawnBarricadeHigh(Lane.RIGHT, z + 15);
+        spawnCoinLine(Lane.RIGHT, z + 30, 5, 0.8);
+
+        spawnLightPole('RIGHT', z + 5);
+        spawnLightPole('LEFT', z + 60);
+        return len;
+      },
+
+      // Chunk C: ConsecutiveHurdles Module (Length: 70)
+      // Center: Jump (Low) then Slide (High). Left: Open, then Jump. Right: Slide, then Open.
+      () => {
+        const len = 70;
+        spawnBarricadeLow(Lane.CENTER, z + 15);
+        spawnCoinArch(Lane.CENTER, z + 12);
+        spawnBarricadeHigh(Lane.CENTER, z + 40);
+        spawnCoinLine(Lane.CENTER, z + 48, 4, 0.8);
+
+        spawnCoinLine(Lane.LEFT, z + 10, 4, 0.8);
+        spawnBarricadeLow(Lane.LEFT, z + 40);
+
+        spawnBarricadeHigh(Lane.RIGHT, z + 15);
+        spawnCoinLine(Lane.RIGHT, z + 25, 6, 0.8);
+
+        spawnLightPole('LEFT', z + 25);
+        return len;
+      },
+
+      // Chunk D: Leapfrog Module (Length: 100)
+      // Staggered Stationary & Ramp Trains allowing beautiful rooftop lateral hopping.
+      () => {
+        const len = 100;
+        spawnTrain(Lane.LEFT, z + 25, 32, false, true);
+        spawnTrain(Lane.CENTER, z + 50, 32, false, false);
+        spawnTrain(Lane.RIGHT, z + 75, 32, false, true);
+
+        spawnCoinLine(Lane.RIGHT, z + 10, 6, 0.8);
+        spawnCoinLine(Lane.LEFT, z + 70, 5, 0.8);
+
+        spawnLightPole('LEFT', z + 5);
+        spawnLightPole('RIGHT', z + 45);
+        return len;
+      },
+
+      // Chunk E: TrainHighway Module (Length: 90)
+      // Center: Safe center train with a ramp. Left/Right: Oncoming moving trains. (Classic Subway Surfers Safe-Haven)
+      () => {
+        const len = 90;
+        spawnTrain(Lane.CENTER, z + 30, 32, false, true);
+        spawnTrain(Lane.LEFT, z + 45, 32, true, false);
+        spawnTrain(Lane.RIGHT, z + 55, 32, true, false);
+
+        spawnLightPole('LEFT', z + 15);
+        spawnLightPole('RIGHT', z + 75);
+        return len;
+      },
+
+      // Chunk F: TheSwerve Module (Length: 80)
+      // Staggered barriers with a continuous diagnostic snake of coins leading players through open paths.
+      () => {
+        const len = 80;
+        spawnBarricadeHigh(Lane.LEFT, z + 15);
+        spawnBarricadeHigh(Lane.CENTER, z + 15);
+
+        spawnBarricadeLow(Lane.CENTER, z + 40);
+        spawnBarricadeLow(Lane.RIGHT, z + 40);
+
+        spawnBarricadeHigh(Lane.LEFT, z + 65);
+        spawnBarricadeHigh(Lane.RIGHT, z + 65);
+
+        // Guiding Snake of Coins
+        spawnCoinLine(Lane.RIGHT, z + 5, 4, 0.8);
+        state.coins.push(
+          { id: `swerve-c1-${z}`, x: 0.5 * GAME_CONSTANTS.LANE_WIDTH, y: 0.8, z: z + 22, width: 1.2, height: 1.2, depth: 1.2, rotation: 0, pulse: 0 },
+          { id: `swerve-c2-${z}`, x: 0, y: 0.8, z: z + 28, width: 1.2, height: 1.2, depth: 1.2, rotation: 0, pulse: 0 },
+          { id: `swerve-c3-${z}`, x: -0.5 * GAME_CONSTANTS.LANE_WIDTH, y: 0.8, z: z + 34, width: 1.2, height: 1.2, depth: 1.2, rotation: 0, pulse: 0 }
+        );
+        spawnCoinLine(Lane.LEFT, z + 38, 4, 0.8);
+        state.coins.push(
+          { id: `swerve-c4-${z}`, x: -0.5 * GAME_CONSTANTS.LANE_WIDTH, y: 0.8, z: z + 54, width: 1.2, height: 1.2, depth: 1.2, rotation: 0, pulse: 0 },
+          { id: `swerve-c5-${z}`, x: 0, y: 0.8, z: z + 58, width: 1.2, height: 1.2, depth: 1.2, rotation: 0, pulse: 0 }
+        );
+        spawnCoinLine(Lane.CENTER, z + 62, 4, 0.8);
+
+        spawnLightPole('LEFT', z + 5);
+        spawnLightPole('RIGHT', z + 45);
+        return len;
+      },
+
+      // Chunk G: PowerUpSpecial Module (Length: 70)
+      // Center: Low hurdle carrying a floating powerup, leading to elevated coins. Sides: Trains blocking outer lanes.
+      () => {
+        const len = 70;
+        spawnBarricadeLow(Lane.CENTER, z + 15);
+        spawnPowerUp(Lane.CENTER, z + 15);
+        spawnCoinLine(Lane.CENTER, z + 28, 5, 2.5);
+
+        spawnTrain(Lane.LEFT, z + 40, 32, false, false);
+        spawnTrain(Lane.RIGHT, z + 40, 32, false, false);
+
+        spawnLightPole('LEFT', z + 10);
+        spawnLightPole('RIGHT', z + 10);
+        return len;
+      }
+    ];
+
+    // Pick a random chunk generator and run it
+    const pickIndex = Math.floor(Math.random() * chunkGenerators.length);
+    const chunkLength = chunkGenerators[pickIndex]();
+
+    // Advance the spawn Z position exactly by the chunk's length
+    state.spawnZ += chunkLength;
   };
 
   const getRandomLane = (): Lane => {
@@ -1512,8 +1600,8 @@ export default function GameCanvas({
       pw.rotation += 0.03;
     });
 
-    // Filter off-screen entities
-    state.obstacles = state.obstacles.filter((obs) => obs.z > GAME_CONSTANTS.PLAYER_Z - 15);
+    // Filter off-screen entities (taking their half-depth into account so long trains don't disappear while player is still on top)
+    state.obstacles = state.obstacles.filter((obs) => (obs.z + (obs.depth || 2) / 2) > (GAME_CONSTANTS.PLAYER_Z - 25));
     state.coins = state.coins.filter((coin) => coin.z > GAME_CONSTANTS.PLAYER_Z - 10 && !coin.collected);
     state.powerUps = state.powerUps.filter((pw) => pw.z > GAME_CONSTANTS.PLAYER_Z - 10 && !pw.collected);
 
@@ -1646,7 +1734,15 @@ export default function GameCanvas({
     const isJetpacking = state.activePowerUps['JETPACK'] > now;
     if (isJetpacking) return;
 
-    state.obstacles.forEach((obs) => {
+    // Sort obstacles so RAMPs are processed first, allowing them to elevate player height (state.player.y)
+    // before checking stationary or moving train collisions in the exact same frame.
+    const sortedObstacles = [...state.obstacles].sort((a, b) => {
+      if (a.type === ObstacleType.RAMP && b.type !== ObstacleType.RAMP) return -1;
+      if (a.type !== ObstacleType.RAMP && b.type === ObstacleType.RAMP) return 1;
+      return 0;
+    });
+
+    sortedObstacles.forEach((obs) => {
       const minX = obs.x - obs.width / 2;
       const maxX = obs.x + obs.width / 2;
       const minY = obs.y;
@@ -1654,10 +1750,12 @@ export default function GameCanvas({
       const minZ = obs.z - obs.depth / 2;
       const maxZ = obs.z + obs.depth / 2;
 
+      // Read current player height dynamically to incorporate any same-frame updates from RAMPs
+      const currentPY = state.player.y;
       const pxMin = pX - pW / 2;
       const pxMax = pX + pW / 2;
-      const pyMin = pY;
-      const pyMax = pY + pH;
+      const pyMin = currentPY;
+      const pyMax = currentPY + pH;
       const pzMin = pZ - pD / 2;
       const pzMax = pZ + pD / 2;
 
@@ -1669,7 +1767,7 @@ export default function GameCanvas({
         if (obs.type === ObstacleType.RAMP) {
           const progress = (pZ - minZ) / obs.depth;
           const rampY = Math.max(0, Math.min(obs.height, progress * obs.height));
-          if (pY <= rampY + 0.3) {
+          if (currentPY <= rampY + 0.3) {
             state.player.y = rampY;
             state.player.vy = 0;
             state.player.isGrounded = true;
@@ -1680,7 +1778,8 @@ export default function GameCanvas({
         }
 
         const isAbove = pyMin >= maxY - 0.5;
-        const isFalling = state.player.vy <= 0;
+        // Allow landing/running on top even with slight vertical velocity or when practically aligned with the roof
+        const isFalling = state.player.vy <= 0.1 || pyMin >= maxY - 0.15;
 
         if ((obs.type === ObstacleType.TRAIN_STATIONARY || obs.type === ObstacleType.TRAIN_MOVING) && isAbove && isFalling) {
           state.player.y = maxY;
@@ -1706,7 +1805,7 @@ export default function GameCanvas({
           return;
         }
 
-        const depth = Math.min(pxMax - minZ, maxZ - pzMin);
+        const depth = Math.min(pzMax - minZ, maxZ - pzMin);
 
         if (obs.type === ObstacleType.BARRICADE_LOW) {
           triggerStumble(now);
